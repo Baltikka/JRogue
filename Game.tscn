@@ -1,0 +1,96 @@
+[gd_scene load_steps=6 format=2]
+
+[ext_resource path="res://urizen sprites/main_tileset.tres" type="TileSet" id=1]
+[ext_resource path="res://urizen sprites/colored.png" type="Texture" id=2]
+[ext_resource path="res://Game.gd" type="Script" id=3]
+[ext_resource path="res://fonts/Theme.tres" type="Theme" id=4]
+
+[sub_resource type="TileSet" id=1]
+0/name = "black"
+0/texture = ExtResource( 2 )
+0/tex_offset = Vector2( 0, 0 )
+0/modulate = Color( 1, 1, 1, 1 )
+0/region = Rect2( 248, 1, 12, 12 )
+0/tile_mode = 0
+0/occluder_offset = Vector2( 0, 0 )
+0/navigation_offset = Vector2( 0, 0 )
+0/shape_offset = Vector2( 0, 0 )
+0/shape_transform = Transform2D( 1, 0, 0, 1, 0, 0 )
+0/shape_one_way = false
+0/shape_one_way_margin = 0.0
+0/shapes = [  ]
+0/z_index = 0
+1/name = "semi-black"
+1/texture = ExtResource( 2 )
+1/tex_offset = Vector2( 0, 0 )
+1/modulate = Color( 1, 1, 1, 0.607843 )
+1/region = Rect2( 235, 1, 12, 12 )
+1/tile_mode = 0
+1/occluder_offset = Vector2( 0, 0 )
+1/navigation_offset = Vector2( 0, 0 )
+1/shape_offset = Vector2( 0, 0 )
+1/shape_transform = Transform2D( 1, 0, 0, 1, 0, 0 )
+1/shape_one_way = false
+1/shape_one_way_margin = 0.0
+1/shapes = [  ]
+1/z_index = 0
+
+[node name="Game" type="Node2D"]
+script = ExtResource( 3 )
+
+[node name="TileMap" type="TileMap" parent="."]
+tile_set = ExtResource( 1 )
+cell_size = Vector2( 12, 12 )
+format = 1
+
+[node name="VisibilityMap" type="TileMap" parent="."]
+tile_set = SubResource( 1 )
+cell_size = Vector2( 12, 12 )
+format = 1
+
+[node name="Player" type="Sprite" parent="."]
+texture = ExtResource( 2 )
+centered = false
+region_enabled = true
+region_rect = Rect2( 14, 105, 12, 12 )
+
+[node name="Camera2D" type="Camera2D" parent="Player"]
+offset = Vector2( 6, 6 )
+current = true
+zoom = Vector2( 0.5, 0.5 )
+smoothing_enabled = true
+drag_margin_left = 0.0
+drag_margin_top = 0.0
+drag_margin_right = 0.0
+drag_margin_bottom = 0.0
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="ColorRect" type="ColorRect" parent="CanvasLayer"]
+anchor_right = 1.0
+margin_bottom = 60.0
+color = Color( 0, 0, 0, 0.54902 )
+
+[node name="Floor" type="Label" parent="CanvasLayer"]
+margin_left = 12.0
+margin_top = 12.0
+margin_right = 92.0
+margin_bottom = 27.0
+theme = ExtResource( 4 )
+text = "Floor: 1"
+
+[node name="HP" type="Label" parent="CanvasLayer"]
+margin_left = 12.0
+margin_top = 36.0
+margin_right = 72.0
+margin_bottom = 51.0
+theme = ExtResource( 4 )
+text = "HP: 10"
+
+[node name="EXP" type="Label" parent="CanvasLayer"]
+margin_left = 96.0
+margin_top = 36.0
+margin_right = 156.0
+margin_bottom = 51.0
+theme = ExtResource( 4 )
+text = "EXP: 0"
