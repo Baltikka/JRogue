@@ -1,3 +1,2 @@
-# dungeon-of-recycling
-Project files for a Godot roguelike tutorial video:
-https://www.youtube.com/watch?v=vQ1UGbUlzH4
+# JRogue(WT)
+Project files for a Godot roguelike provided by ThoughtQuake
