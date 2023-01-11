@@ -11,16 +11,72 @@ const LEVEL_SIZES = [
 ]
 
 const LEVEL_ROOM_COUNTS = [5, 7, 9, 12, 15]
+const LEVEL_ENEMY_COUNTS = [5, 9, 12, 18, 26]
 const MIN_ROOM_DIMENSION = 5
 const MAX_ROOM_DIMENSION = 8
+const PLAYER_START_HP = 10
 
 enum Tile {WALL, DOOR, GROUND, LADDER_DOWN, STONE, STONE2, STONE3, DOOR_OPEN, GROUND2, GROUND3}
+
+const EnemyScene = preload("res://Enemy.tscn")
+
+class Enemy extends Reference:
+	var sprite_node
+	var tile
+	var full_hp
+	var hp
+	var dead = false
+	
+	func _init(game, enemy_level, x, y):
+		full_hp = 1 + enemy_level * 2
+		hp = full_hp
+		tile = Vector2(x, y)
+		sprite_node = EnemyScene.instance()
+		sprite_node.position = tile * TILE_SIZE
+		game.add_child(sprite_node)
+	
+	func remove():
+		sprite_node.queue_free()
+	
+	func take_damage(game, dmg):
+		if dead:
+			return
+		
+		hp = max(0, hp - dmg)
+		sprite_node.get_node("HPBar").rect_size.x = TILE_SIZE * hp / full_hp
+		
+		if hp == 0:
+			dead = true
+			game.experience += 10 * full_hp
+	
+	func act(game):
+		if !sprite_node.visible:
+			return
+		var my_point = game.enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y, 0))
+		var player_point = game.enemy_pathfinding.get_closest_point(Vector3(game.player_tile.x, game.player_tile.y, 0))
+		var path =  game.enemy_pathfinding.get_point_path(my_point, player_point)
+		if path:
+			assert(path.size() > 1)
+			var move_tile = Vector2(path[1].x, path[1].y)
+			
+			if move_tile == game.player_tile:
+				game.damage_player(1)
+			else:
+				var blocked = false
+				for enemy in game.enemies:
+					if enemy.tile == move_tile:
+						blocked = true
+						break
+				
+				if !blocked:
+					tile = move_tile
 
 # Current Level
 var level_num = 0
 var map = []
 var rooms = []
 var level_size
+var enemies = []
 
 # Node refs
 onready var tile_map = $TileMap
@@ -29,7 +85,9 @@ onready var player = $Player
 
 # Game state
 var player_tile
+var player_hp = PLAYER_START_HP
 var experience = 0
+var enemy_pathfinding
 
 
 func _ready():
@@ -59,7 +117,17 @@ func try_move(dx, dy):
 	
 	match tile_type:
 		Tile.GROUND:
-			player_tile = Vector2(x, y)
+			var blocked = false
+			for enemy in enemies:
+				if enemy.tile.x == x and enemy.tile.y == y:
+					enemy.take_damage(self, 1)
+					if enemy.dead:
+						enemy.remove()
+						enemies.erase(enemy)
+					blocked = true
+					break
+			if !blocked:
+				player_tile = Vector2(x, y)
 		
 		Tile.DOOR:
 			set_tile(x, y, Tile.DOOR_OPEN)
@@ -71,12 +139,21 @@ func try_move(dx, dy):
 			else:
 				experience += 69
 	
+	for enemy in enemies:
+		enemy.act(self)
+	
 	call_deferred("update_visuals")
 
 func build_level():
 	rooms.clear()
 	map.clear()
 	tile_map.clear()
+	
+	for enemy in enemies:
+		enemy.remove()
+	enemies.clear()
+	
+	enemy_pathfinding = AStar.new()
 	
 	level_size = LEVEL_SIZES[level_num]
 	for x in range(level_size.x):
@@ -107,6 +184,24 @@ func build_level():
 	var player_y = start_room.position.y + 1 + randi() % int(start_room.size.y - 2)
 	player_tile = Vector2(player_x, player_y)
 	
+	# Place enemies
+	var num_enemies =  LEVEL_ENEMY_COUNTS[level_num]
+	for _i in range(num_enemies):
+		var room = rooms[1 + randi() % (rooms.size() - 1)]
+		var x = room.position.x + 1 + randi() % int(room.size.x - 2)
+		var y = room.position.y + 1 + randi() % int(room.size.y - 2)
+		
+		var blocked = false
+		for enemy in enemies:
+			if enemy.tile.x == x and enemy.tile.y == y:
+				blocked = true
+				break
+		
+		if !blocked:
+			var enemy = Enemy.new(self, randi() % 2, x, y)
+			enemies.append(enemy)
+			
+	
 	call_deferred("update_visuals")
 	
 	#Place end ladder
@@ -116,6 +211,23 @@ func build_level():
 	set_tile(ladder_x, ladder_y, Tile.LADDER_DOWN)
 	
 	$CanvasLayer/Floor.text = "Floor: " + String(level_num+1)
+
+func clear_path(tile):
+	var new_point = enemy_pathfinding.get_available_point_id()
+	enemy_pathfinding.add_point(new_point, Vector3(tile.x, tile.y, 0))
+	var points_to_connect = []
+	
+	if tile.x > 0 and map[tile.x - 1][tile.y] == Tile.GROUND:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x - 1, tile.y, 0)))
+	if tile.y > 0 and map[tile.x][tile.y - 1] == Tile.GROUND:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y - 1, 0)))
+	if tile.x < level_size.x - 1 and map[tile.x + 1][tile.y] == Tile.GROUND:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x + 1, tile.y, 0)))
+	if tile.x < level_size.y - 1 and map[tile.x][tile.y + 1] == Tile.GROUND:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y + 1, 0)))
+	
+	for point in points_to_connect:
+		enemy_pathfinding.connect_points(point, new_point)
 
 func update_visuals():
 	player.position = player_tile * TILE_SIZE
@@ -136,6 +248,17 @@ func update_visuals():
 				var occlusion = space_state.intersect_ray(player_center, test_point)
 				if !occlusion || (occlusion.position - test_point).length() < 1:
 					visibility_map.set_cell(x, y, -1)
+	
+	for enemy in enemies:
+		enemy.sprite_node.position = enemy.tile * TILE_SIZE
+		if !enemy.sprite_node.visible:
+			var enemy_center = tile_to_pixel_center(enemy.tile.x, enemy.tile.y)
+			var occlusion = space_state.intersect_ray(player_center, enemy_center)
+			if !occlusion:
+				enemy.sprite_node.visible = true
+	
+	$CanvasLayer/HP.text = "HP: " + str(player_hp)
+	$CanvasLayer/EXP.text = "EXP: " + str(experience)
 
 func tile_to_pixel_center(x, y):
 	return Vector2((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE)
@@ -204,17 +327,17 @@ func add_random_connection(stone_graph, room_graph):
 	path = Array(path)
 	
 	# Custom multiple doors check
-#	if (!map[start_position.x-1][start_position.y] == Tile.DOOR
-#	 or !map[start_position.x+1][start_position.y] == Tile.DOOR
-#	 or !map[start_position.x][start_position.y-1] == Tile.DOOR
-#	 or !map[start_position.x][start_position.y+1] == Tile.DOOR):
+#	if (tile_map.get_cell(start_position.x-1, start_position.y) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x+1, start_position.y) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x, start_position.y-1) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x, start_position.y+1) == Tile.DOOR):
 #		set_tile(start_position.x, start_position.y, Tile.DOOR_OPEN)
 #	else:
 	set_tile(start_position.x, start_position.y, Tile.DOOR)
-#	if (!map[start_position.x-1][start_position.y] == Tile.DOOR
-#	 or !map[start_position.x+1][start_position.y] == Tile.DOOR
-#	 or !map[start_position.x][start_position.y-1] == Tile.DOOR
-#	 or !map[start_position.x][start_position.y+1] == Tile.DOOR):
+#	if (tile_map.get_cell(start_position.x-1, start_position.y) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x+1, start_position.y) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x, start_position.y-1) == Tile.DOOR
+#	 or tile_map.get_cell(start_position.x, start_position.y+1) == Tile.DOOR):
 #		set_tile(start_position.x, start_position.y, Tile.DOOR_OPEN)
 #	else:
 	set_tile(end_position.x, end_position.y, Tile.DOOR)
@@ -353,6 +476,7 @@ func set_tile(x, y, type):
 	tile_map.set_cell(x, y, type)
 	match type:
 		Tile.GROUND:
+			clear_path(Vector2(x, y))
 			map[x][y] = Tile.GROUND
 			var groundrand = rand_range(0,1)
 			if groundrand <= 0.8:
@@ -362,6 +486,7 @@ func set_tile(x, y, type):
 			else:
 				tile_map.set_cell(x, y, Tile.GROUND3)
 		Tile.DOOR_OPEN:
+			clear_path(Vector2(x, y))
 			map[x][y] = Tile.GROUND
 		Tile.STONE2:
 			map[x][y] = Tile.STONE
@@ -373,6 +498,9 @@ func set_tile(x, y, type):
 func set_vis_tile(x, y, type):
 	visibility_map.set_cell(x, y, type)
 
-
+func damage_player(dmg):
+	player_hp = max(0, player_hp - dmg)
+	if player_hp == 0:
+		pass #add lose screen
 
 
